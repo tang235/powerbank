@@ -1421,6 +1421,22 @@ function startPractice(){
   phase = 'practice';
   showBanner('🎤 老师先喊一声做示范，同学们跟着一起喊！');
 }
+// 进场自动校准：静默采样约 1.6 秒环境底噪并扣除，之后没喊时音量条就不动了
+function autoCalibrate(onDone){
+  if(!anySource()){ onDone(); return; }   // 没麦克风（拒绝了）就跳过，直接开始
+  calibrating = true; calSamples = []; noiseFloor = 0;
+  showBanner('🤫 准备中…请先安静一小会儿');
+  setTimeout(() => {
+    calibrating = false;
+    if(calSamples.length){
+      calSamples.sort((a,b)=>a-b);
+      const p80 = calSamples[Math.floor(calSamples.length*.8)];
+      noiseFloor = clamp(p80 * 1.15, 0, 0.4);
+    }
+    $('#banner').style.display = 'none';
+    onDone();
+  }, 1600);
+}
 function startCountdown(){
   $('#banner').style.display = 'none';
   phase = 'countdown';
@@ -1709,13 +1725,14 @@ function gateStart(fn){
   });
 }
 
-$('#btnStart').addEventListener('click', () => gateStart(async () => {
+$('#btnStart').addEventListener('click', async () => {
   ensureCtx();
   const r = await startMic();
   $('#ovIntro').classList.add('hide');
   if(!r.ok) setTimeout(()=>alert(micFailMsg(r.why)), 60);
-  startPractice();
-}));
+  resetWorld();
+  autoCalibrate(() => startCountdown());   // 自动扣底噪 → 直接 321 开喊（跳过填名字和练习）
+});
 
 $('#btnStartSys').addEventListener('click', () => gateStart(async () => {
   ensureCtx();
@@ -1873,7 +1890,8 @@ addEventListener('keyup', e => { if(e.code === 'Space'){ e.preventDefault(); sim
 
 $('#btnAgain').addEventListener('click', () => {
   $('#ovEnd').classList.add('hide');
-  startPractice();
+  resetWorld();
+  startCountdown();     // 再玩一次：直接 321，麦克风和底噪都已就绪，不重复练习/校准
 });
 
 /* ========================= 自动化测试钩子（不影响正常使用） ========================= */
